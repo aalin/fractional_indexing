@@ -24,8 +24,8 @@ module FractionalIndexing
     # no trailing zeros allowed.
     # digits is a string such as '0123456789' for base 10.  Digits must be in
     # ascending character code order!
-    raise FIError, "#{a} >= #{b}" if b && a >= b
-    raise FIError, "trailing zero" if (a[-1] == "0") || (b && (b[-1] == "0"))
+    raise Error, "#{a} >= #{b}" if b && a >= b
+    raise Error, "trailing zero" if (a[-1] == "0") || (b && (b[-1] == "0"))
     if b
       # remove longest common prefix.  pad `a` with 0s as we
       # go.  note that we don't need to pad `b`, because it can't
@@ -67,7 +67,7 @@ module FractionalIndexing
 
   def self.validate_integer(i)
     unless i.length == get_integer_length(i[0])
-      raise FIError, "invalid integer part of order key: #{i}"
+      raise Error, "invalid integer part of order key: #{i}"
     end
   end
 
@@ -77,25 +77,25 @@ module FractionalIndexing
     elsif ('A'..'Z').cover?(head)
       return 'Z'.ord - head.ord + 2
     end
-    raise FIError, "invalid order key head: " + head
+    raise Error, "invalid order key head: " + head
   end
 
   def self.get_integer_part(key)
     integer_part_length = get_integer_length(key[0])
-    raise FIError, "invalid order key: #{key}" if integer_part_length > key.size
+    raise Error, "invalid order key: #{key}" if integer_part_length > key.size
 
     key[0...integer_part_length]
   end
 
   def self.validate_order_key(key)
-    raise FIError, "invalid order key: #{key}" if key == SMALLEST_INTEGER
+    raise Error, "invalid order key: #{key}" if key == SMALLEST_INTEGER
 
     # get_integer_part() will throw if the first character is bad,
     # or the key is too short.  we'd call it to check these things
     # even if we didn't need the result
     i = get_integer_part(key)
     f = key[i.size..]
-    raise FIError, "invalid order key: #{key}" if f[-1] == "0"
+    raise Error, "invalid order key: #{key}" if f[-1] == "0"
 
     nil
   end
