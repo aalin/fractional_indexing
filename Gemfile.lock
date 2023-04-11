@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    fractional_indexing (0.1.1)
+    fractional_indexing (0.1.2)
 
 GEM
   remote: https://rubygems.org/
@@ -11,6 +11,7 @@ GEM
 
 PLATFORMS
   x86_64-darwin-20
+  x86_64-linux
 
 DEPENDENCIES
   fractional_indexing!
