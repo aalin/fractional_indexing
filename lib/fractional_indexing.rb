@@ -25,22 +25,16 @@ module FractionalIndexing
     # digits is a string such as '0123456789' for base 10.  Digits must be in
     # ascending character code order!
     raise Error, "#{a} >= #{b}" if b && a >= b
-    raise Error, "trailing zero" if (a[-1] == "0") || (b && (b[-1] == "0"))
+    raise Error, "trailing zero" if a.end_with?("0") || b&.end_with?("0")
+
     if b
       # remove longest common prefix.  pad `a` with 0s as we
       # go.  note that we don't need to pad `b`, because it can't
       # end before `a` while traversing the common prefix.
-      n = 0
-      a = a.ljust(b.length, "0")
-      for i in 0..(b.length - 1)
-        if a[i] == b[i]
-          n += 1
-        else
-          break
-        end
+      n = b.each_char.with_index.count { |c, i| (a[i] || "0") == c }
+      if n > 0
+        return b[0...n] + midpoint(a[n..], b[n..], digits)
       end
-
-      return b[0..(n - 1)] + midpoint(a[n..-1], b[n..-1], digits) if n > 0
     end
 
     # first digits (or lack of digit) are different
@@ -50,6 +44,7 @@ module FractionalIndexing
       min_digit = (0.5 * (digit_a + digit_b)).round
       return digits[min_digit]
     else
+      # first digits are consecutive
       if b && b.length > 1
         return b[0]
       else
@@ -59,45 +54,51 @@ module FractionalIndexing
         # given, for example, midpoint('49', '5'), return
         # '4' + midpoint('9', null), which will become
         # '4' + '9' + midpoint('', null), which is '495'
-        digit_a = a.empty? ? 0 : digits.index(a[0])
-        return digits[digit_a] + midpoint(a[1..-1], nil, digits)
+        return digits[digit_a] + midpoint(a[1..], nil, digits)
       end
     end
   end
 
-  def self.validate_integer(i)
-    unless i.length == get_integer_length(i[0])
-      raise Error, "invalid integer part of order key: #{i}"
+  def self.validate_integer(int)
+    unless int.length == get_integer_length(int[0])
+      raise Error, "invalid integer part of order key: #{int}"
     end
   end
 
   def self.get_integer_length(head)
-    if ('a'..'z').cover?(head)
-      return head.ord - 'a'.ord + 2
-    elsif ('A'..'Z').cover?(head)
-      return 'Z'.ord - head.ord + 2
+    case head
+    in 'a'..'z'
+      head.ord - 'a'.ord + 2
+    in 'A'..'Z'
+      'Z'.ord - head.ord + 2
+    else
+      raise Error, "invalid order key head: #{head}"
     end
-    raise Error, "invalid order key head: " + head
   end
 
   def self.get_integer_part(key)
     integer_part_length = get_integer_length(key[0])
-    raise Error, "invalid order key: #{key}" if integer_part_length > key.size
 
-    key[0...integer_part_length]
+    if integer_part_length > key.length
+      raise Error, "invalid order key: #{key}"
+    end
+
+    key.slice(0, integer_part_length)
   end
 
   def self.validate_order_key(key)
-    raise Error, "invalid order key: #{key}" if key == SMALLEST_INTEGER
+    if key == SMALLEST_INTEGER
+      raise Error, "invalid order key: #{key}"
+    end
 
     # get_integer_part() will throw if the first character is bad,
     # or the key is too short.  we'd call it to check these things
     # even if we didn't need the result
     i = get_integer_part(key)
     f = key[i.size..]
-    raise Error, "invalid order key: #{key}" if f[-1] == "0"
-
-    nil
+    if f.end_with?("0")
+      raise Error, "invalid order key: #{key}"
+    end
   end
 
   def self.increment_integer(x, digits)
@@ -126,10 +127,14 @@ module FractionalIndexing
       else
         digs.pop
       end
-      return h + digs.join
+      h + digs.join
     else
-      return head + digs.join
+      head + digs.join
     end
+  end
+
+  def self.increment_integer!(x, digits)
+    increment_integer(x, digits) or raise(Error, "cannot increment anymore")
   end
 
   def self.decrement_integer(x, digits)
@@ -152,53 +157,61 @@ module FractionalIndexing
       elsif head == 'A'
         return nil
       end
-      h = (head.ord - 1).chr
+      h = head.ord.pred.chr
       if h < 'Z'
         digs.push(digits[-1])
       else
         digs.pop
       end
-      return h + digs.join
+      h + digs.join
     else
-      return head + digs.join
+      head + digs.join
     end
+  end
+
+  def self.decrement_integer!(x, digits)
+    decrement_integer(x, digits) or raise(Error, "cannot decrement anymore")
   end
 
   def self.generate_key_between(a, b, digits = BASE_62_DIGITS)
     validate_order_key(a) if a
     validate_order_key(b) if b
-    raise "a >= b" if a && b && a >= b
+    raise "#{a.inspect} >= #{b.inspect}" if a && b && a >= b
 
-    if a == nil
-      return INTEGER_ZERO if b == nil
+    unless a
+      return INTEGER_ZERO unless b
+
       ib = get_integer_part(b)
-      fb = b[ib.length..-1]
-      return ib + midpoint("", fb, digits) if ib == SMALLEST_INTEGER
-      return ib if ib < b
-      res = decrement_integer(ib, digits)
-      raise "cannot decrement any more" if res == nil
-      return res
+      if ib == SMALLEST_INTEGER
+        fb = b[ib.length..]
+        return ib + midpoint("", fb, digits)
+      elsif ib < b
+        return ib
+      else
+        return decrement_integer!(ib, digits)
+      end
     end
 
-    if b == nil
+    unless b
       ia = get_integer_part(a)
-      fa = a[ia.length..-1]
-      i = increment_integer(ia, digits)
-      return ia + midpoint(fa, nil, digits) if i == nil
-      return i
+      fa = a[ia.length..]
+      return increment_integer(ia, digits) || (ia + midpoint(fa, nil, digits))
     end
 
     ia = get_integer_part(a)
-    fa = a[ia.length..-1]
+    fa = a[ia.length..]
     ib = get_integer_part(b)
-    fb = b[ib.length..-1]
-    return ia + midpoint(fa, fb, digits) if ia == ib
-    i = increment_integer(ia, digits)
-    raise "cannot increment any more" if i == nil
+    fb = b[ib.length..]
+
+    if ia == ib
+      return ia + midpoint(fa, fb, digits)
+    end
+
+    i = increment_integer!(ia, digits)
 
     return i if i < b
 
-    return ia + midpoint(fa, nil, digits)
+    ia + midpoint(fa, nil, digits)
   end
 
   # Returns an array of n distinct keys in sorted order.
@@ -206,42 +219,26 @@ module FractionalIndexing
   # If one or the other is nil, returns consecutive "integer"
   # keys. Otherwise, returns relatively short keys between.
   def self.generate_n_keys_between(a, b, n, digits = BASE_62_DIGITS)
-    return [] if n.zero?
-
-    return [generate_key_between(a, b, digits)] if n == 1
-
-    unless b
-      c = generate_key_between(a, b, digits)
-      result = [c]
-      (n - 1).times do
-        c = generate_key_between(c, b, digits)
-        result << c
-      end
-      return result
+    if n == 0
+      return []
+    elsif n == 1
+      return [generate_key_between(a, b, digits)]
     end
 
-    unless a
-      c = generate_key_between(a, b, digits)
-      result = [c]
-      (n - 1).times do
-        c = generate_key_between(a, c, digits)
-        result << c
-      end
-      return result.reverse
-    end
+    return n.times.map do
+      a = generate_key_between(a, b, digits)
+    end unless b
 
-    mid = n / 2
+    return n.times.map do
+      b = generate_key_between(a, b, digits)
+    end.reverse unless a
+
+    mid = (n / 2).floor
     c = generate_key_between(a, b, digits)
     [
-      *generate_n_keys_between(a, c, mid.floor, digits),
+      *generate_n_keys_between(a, c, mid, digits),
       c,
-      *generate_n_keys_between(c, b, n - mid.floor - 1, digits)
+      *generate_n_keys_between(c, b, n - mid - 1, digits)
     ]
-  end
-
-  # Rounds a float to an integer using decimal.Decimal.quantize with
-  # decimal.ROUND_HALF_UP rounding method.
-  def self.round_half_up(n)
-    (n.to_d.round(0, half: :up)).to_i
   end
 end
